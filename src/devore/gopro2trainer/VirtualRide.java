@@ -75,9 +75,6 @@ public class VirtualRide {
     }
     
     public static void main(String[] args) throws Exception {
-        long time = System.currentTimeMillis();
-        args = new String[]{"-o", "Virtual Ride.gpx"};
-        
         Options options = new Options();
         options.addOption("o", true, "Output file");
         options.addOption("reencode", "Reencode the output. Otherwise, the stream is copied");
@@ -168,7 +165,6 @@ public class VirtualRide {
         }
         VirtualRide vr = new VirtualRide(directory);
         vr.run();
-        System.out.println("time: "+(System.currentTimeMillis() - time));
     }
     
     public void run() throws IOException, TransformerException, ParserConfigurationException {

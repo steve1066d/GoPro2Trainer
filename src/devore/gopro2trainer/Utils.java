@@ -23,7 +23,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.concurrent.TimeUnit;
 
 public class Utils {
-    private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern ( "MM/dd/yy HH:mm:ss.SS" );
+    private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern ("MM/dd/yy HH:mm:ss.SS");
 
     public static String formatElapsed(long millis) {
         String timeStr = String.format("%02d:%02d:%02d",
@@ -35,9 +35,9 @@ public class Utils {
     }
     
     public static String formatDateTime(long millis) {
-        Instant instant = Instant.ofEpochMilli ( millis );
-        ZonedDateTime zdt = ZonedDateTime.ofInstant ( instant , ZoneId.systemDefault() );
-        return FORMATTER.format ( zdt );
+        Instant instant = Instant.ofEpochMilli (millis);
+        ZonedDateTime zdt = ZonedDateTime.ofInstant(instant, ZoneId.systemDefault());
+        return FORMATTER.format(zdt);
     }
     
     public static String isoDate(long millis) {

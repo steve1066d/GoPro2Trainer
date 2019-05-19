@@ -16,7 +16,6 @@
  */
 package devore.gopro2trainer;
 
-import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import static java.nio.charset.StandardCharsets.US_ASCII;
@@ -32,9 +31,6 @@ import java.util.List;
  */
 public class GPMF {
     private final ArrayList<Point> list = new ArrayList<>();
-    
-    public GPMF() {
-    }
 
     public List<Point> getPoints() throws IOException {
         return list;
@@ -97,7 +93,6 @@ public class GPMF {
         String key;
         ByteBuffer buffer;
         int size;
-        DataInputStream dis;
         
         public Data(String key, byte[] data, int size) {
             this.key = key;
