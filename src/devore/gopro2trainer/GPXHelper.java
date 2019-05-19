@@ -77,7 +77,7 @@ public class GPXHelper {
         for (File f: files) {
             String path = f.getPath();
             Point lastPoint = null;
-            logger.info("Load gps: "+f.toString());
+            logger.log(Level.INFO, "Load gps: {0}", f.toString());
             List<Point> filePointList = new ArrayList<>();
             if (f.getName().toLowerCase(Locale.US).endsWith(".mp4")) {
                 GoProMP4 mp4 = new GoProMP4(f);
@@ -127,7 +127,7 @@ public class GPXHelper {
     }
 
     public void fixMissingUpdates() {
-        // My garmin sometimes has large distance, repeated twice.  This scans looking for a section
+        // My Garmin sometimes has large distance, repeated twice.  This scans looking for a section
         // that remained the same as the last log entry, then replaces it with halfway between the 2 points.
         for(int i=pointList.size()-2; i >=0; i--){
             Point pt1 = pointList.get(i);
@@ -141,8 +141,8 @@ public class GPXHelper {
     }
     
     /**
-     * This removes from the log any entries where there wasn't at least 1.5 mph of motion.  Once stopped
-     * it requires, 3.0 mph to start back up.
+     * This removes from the log any entries where there wasn't at least a minimum amount of motion.  Once stopped
+     * it requires a certain speed to start back up. (default is 3 km/h and 6 km/h)
      * It populates ranges with any ranges that should be removed from the video.  (Any stops less
      * than 2 seconds will assumed to be a fluke in the data and will not have the video adjusted
      */

@@ -69,23 +69,23 @@ public class GPMF {
         return null;
     }
     
-    private Data getData(ByteBuffer is) throws IOException {
-        if (!is.hasRemaining()) {
+    private Data getData(ByteBuffer byteBuffer) throws IOException {
+        if (!byteBuffer.hasRemaining()) {
             return null;
         }
         byte[] buffer = new byte[4];
-        is.get(buffer);
+        byteBuffer.get(buffer);
         String key = new String(buffer, US_ASCII);
-        is.get(); //sampleType
-        int sampleSize = is.get();
-        int sampleCount = Short.toUnsignedInt(is.getShort());
+        byteBuffer.get(); //sampleType
+        int sampleSize = byteBuffer.get();
+        int sampleCount = Short.toUnsignedInt(byteBuffer.getShort());
         int byteSize = sampleSize * sampleCount;
         int mod = byteSize % 4;
         if (mod > 0) {
             byteSize += (4 - mod);
         }
         byte[] samples = new byte[byteSize];
-        is.get(samples);
+        byteBuffer.get(samples);
         return new Data(key, samples, sampleSize * sampleCount);
     }
     

@@ -48,8 +48,8 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.xml.sax.SAXException;
 
-public class VirtualRide {
-    private static final Logger logger = Logger.getLogger(VirtualRide.class.getName());
+public class GoPro2Trainer {
+    private static final Logger logger = Logger.getLogger(GoPro2Trainer.class.getName());
     private static CommandLine cmd;
     private static File directory;
     /* Used to correct the video timing */
@@ -67,7 +67,7 @@ public class VirtualRide {
         Logger.getLogger("").setLevel(Level.INFO);
     }
     
-    public VirtualRide(File directory) throws IOException, SAXException, ParserConfigurationException {
+    public GoPro2Trainer(File directory) throws IOException, SAXException, ParserConfigurationException {
         vh = new VideoHelper(directory, cmd);
         gpxHelper = new GPXHelper(sourceFiles, baseOutputName, cmd);
         vh.setOutputFile(baseOutputName);
@@ -76,7 +76,7 @@ public class VirtualRide {
     
     public static void main(String[] args) throws Exception {
         Options options = new Options();
-        options.addOption("o", true, "Output file");
+        options.addOption("o", true, "Output file.  The default is Output");
         options.addOption("reencode", "Reencode the output. Otherwise, the stream is copied");
         options.addOption("offset", true, "Sets the offset of the video in milliseconds");
         options.addOption("trimStart", true, "Trims the start of the file in milliseconds");
@@ -84,12 +84,12 @@ public class VirtualRide {
         options.addOption("maxSizeMB", true, "Sets the maximum size if reencoding.  The default is 2300");
         options.addOption("bitrate", true, "The bitrate to use, if the maxSize is not reached. The default is 10000");
         options.addOption("stopSpeed", true, "The minimum speed before a stop is recognized.  The default is 3 km/h");
-        options.addOption("startSpeed", true, "The minimum speed before a stop end is recognized. The default is 6 mph");
+        options.addOption("startSpeed", true, "The minimum speed before a stop end is recognized. The default is 6 km/h");
         options.addOption("mph", "Specify the speed in mph.  Otherwise km/h is used");
         options.addOption("fixMissing", "Replaces duplicate points with the average of adjacent points.  Helpful for at least my Garmin");
         options.addOption("quiet", "Suppress info messages");
         options.addOption("verbose", "Display all messages");
-        options.addOption("help", "Help");
+        options.addOption("help", "Displays this message");
 
         CommandLineParser parser = new DefaultParser();
         boolean invalid = false;
@@ -115,10 +115,8 @@ public class VirtualRide {
         if (list.isEmpty()) {
             list = Collections.singletonList("./");
         }
-        baseOutputName = cmd.getOptionValue("o");
-        if (baseOutputName != null) {
-            baseOutputName = FilenameUtils.removeExtension(baseOutputName);
-        }
+        baseOutputName = cmd.getOptionValue("o", "Output");
+        baseOutputName = FilenameUtils.removeExtension(baseOutputName);
         for (String fileName : list) {
             File f = new File(fileName);
             if (directory == null) {
@@ -158,12 +156,7 @@ public class VirtualRide {
         trimStart = Long.parseLong(cmd.getOptionValue("trimStart", "0"));
         trimEnd = Long.parseLong(cmd.getOptionValue("trimEnd", "0"));
         
-        if (baseOutputName == null) {
-            File f = sourceFiles.iterator().next();
-            baseOutputName = FilenameUtils.removeExtension(f.getName());
-            baseOutputName += "_virt";
-        }
-        VirtualRide vr = new VirtualRide(directory);
+        GoPro2Trainer vr = new GoPro2Trainer(directory);
         vr.run();
     }
     
@@ -210,7 +203,7 @@ public class VirtualRide {
         Document doc = documentBuilder.newDocument();
         Element gpx = doc.createElement("gpx");
         gpx.setAttribute("xmlns", "http://www.topografix.com/GPX/1/1");
-        gpx.setAttribute("creator", "VirtualRide by Steve Devore <mncyclist66@gmail.com>");
+        gpx.setAttribute("creator", "GoPro2Trainer by Steve Devore, mncyclist66@gmail.com");
         doc.appendChild(gpx);
         Element metadata = doc.createElement("metadata");
         gpx.appendChild(metadata);

@@ -36,7 +36,6 @@ import java.util.logging.Logger;
 
 /**
  * Class to read the metadata and gps data from a gopro MP4.
- * @author steve
  */
 public class GoProMP4 {
     private static final Logger logger = Logger.getLogger(GoProMP4.class.getName());
