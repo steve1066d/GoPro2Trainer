@@ -21,21 +21,17 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 
 public class Point implements Comparable<Point> {
+    public static final double METERS_TO_MILES = 1.0 / 1609.344;
+    /** meters per second to miles per hour */
+    public static final double MS_TO_MPH = 2.237;
+    
     double lat;
     double lon;
     long timestamp;
     double elevation;
+    double power;
+    double speed = Double.NaN;
 
-    Point(Element element) {
-        lat = Double.parseDouble(element.getAttribute("lat"));
-        lon = Double.parseDouble(element.getAttribute("lon"));
-        Element ele = (Element) element.getElementsByTagName("time").item(0);
-        String time = ele.getTextContent();
-        timestamp = Instant.parse(time).toEpochMilli();
-        ele = (Element) element.getElementsByTagName("ele").item(0);
-        elevation = Double.parseDouble(ele.getTextContent());
-    }
-    
     public Point(Double lat, Double lon, long timestamp, double elevation) {
         this.lat = lat;
         this.lon = lon;
@@ -48,11 +44,24 @@ public class Point implements Comparable<Point> {
         return Utils.formatDateTime(timestamp)+": "+lat+" "+lon+" "+elevation;
     }
 
+    /**
+     * Returns the current speed.  It will either use the last point as a reference, or the speed data
+     * if it is available.
+     * 
+     * @param lastPoint the previous point
+     */
     public double getMPH(Point lastPoint) {
-        double miles = getMiles(lastPoint);
-        return miles / ( (timestamp - lastPoint.timestamp) / 1000.0 / 60 / 60);
+        if (Double.isNaN(speed)) {
+            double miles = getMiles(lastPoint);
+            return miles / ( (timestamp - lastPoint.timestamp) / 1000.0 / 60 / 60);
+        } else {
+            return speed;
+        }
     }
 
+    /**
+     * Returns the miles from the previous point.
+     */
     public double getMiles(Point lastPoint) {
         if ((lastPoint.lat == this.lat) && (lastPoint.lon == this.lon)) {
             return 0;
@@ -67,7 +76,10 @@ public class Point implements Comparable<Point> {
         }
     }
 
-    public String getTime() {
+    /**
+     *  Returns the time in ISO-8601 format
+     */
+    public String getISOTime() {
         return Instant.ofEpochMilli(timestamp).toString();            
     }
 
@@ -78,7 +90,7 @@ public class Point implements Comparable<Point> {
         Element ele = doc.createElement("ele");
         ele.setTextContent(String.format("%.2f", elevation));
         Element time = doc.createElement("time");
-        time.setTextContent(getTime());
+        time.setTextContent(getISOTime());
         trkpt.appendChild(ele);
         trkpt.appendChild(time);
         return trkpt;
@@ -87,5 +99,13 @@ public class Point implements Comparable<Point> {
     @Override
     public int compareTo(Point o) {
         return Long.compare(this.timestamp, o.timestamp);
+    }
+    
+    public double getSlope(Point lastPoint) {
+        double miles = getMiles(lastPoint);
+        if (miles == 0) {
+            return 0;
+        }
+        return ((elevation - lastPoint.elevation) * METERS_TO_MILES) / miles;
     }
 }

@@ -49,6 +49,7 @@ import org.w3c.dom.Element;
 import org.xml.sax.SAXException;
 
 public class GoPro2Trainer {
+    // -o "Elm Creek Outer Loop" -fixMissing -verbose -mph  -stopSpeed 4 -startSpeed 5 -elevation test.tcx -trimEnd 34000 -slope .01 -reencode GH*.mp4 
     private static final Logger logger = Logger.getLogger(GoPro2Trainer.class.getName());
     private static CommandLine cmd;
     private static File directory;
@@ -61,6 +62,26 @@ public class GoPro2Trainer {
     private final VideoHelper vh;
     private static String baseOutputName;
     private static final ArrayList<File> sourceFiles = new ArrayList<>();
+
+    public void run() throws IOException, TransformerException, ParserConfigurationException, SAXException {
+        gpxHelper.trimToVideo(vh.startTime() + trimStart, vh.endTime() - trimEnd);
+        gpxHelper.fixMissingUpdates();
+        gpxHelper.fixElevations();
+        gpxHelper.changePolling(1000);
+//        Experimental.checkSync(cmd, gpxHelper.getPoints());
+
+        gpxHelper.removeBeginEnd();
+        gpxHelper.markSpots();
+        vh.trim(gpxHelper.startTime(), gpxHelper.endTime(), gpxHelper.getCuts());
+
+        gpxHelper.removeStops();
+        gpxHelper.validate();
+        gpxHelper.smoothEleveation();
+        gpxHelper.changeSlope();
+        
+        writeXML(gpxHelper.getBaseName()+".gpx");
+//        Experimental.makeCSV(gpxHelper.getPoints());
+    }
     
     static {
         System.setProperty("java.util.logging.SimpleFormatter.format", "%5$s%6$s%n");
@@ -90,7 +111,10 @@ public class GoPro2Trainer {
         options.addOption("quiet", "Suppress info messages");
         options.addOption("verbose", "Display all messages");
         options.addOption("help", "Displays this message");
-
+        options.addOption("elevation", true, "A gps file that is used only for elevation data. It will replace "
+                + "the existing gps data with elevations that are the closest match");
+        options.addOption("slope", true, "Changes the overall slope by the given decimal percentage.  Use .01 for 1%");
+        
         CommandLineParser parser = new DefaultParser();
         boolean invalid = false;
         try {
@@ -126,9 +150,14 @@ public class GoPro2Trainer {
                     directory = f.getParentFile();
                 }
             }
+            if (directory == null) {
+                directory = new File("./");
+            }
             if (f.isDirectory()) {
                 Collection<File> files = 
                      FileUtils.listFiles(f, new WildcardFileFilter("*.gpx", IOCase.INSENSITIVE), null);
+                sourceFiles.addAll(files);
+                files = FileUtils.listFiles(f, new WildcardFileFilter("*.tcx", IOCase.INSENSITIVE), null);
                 sourceFiles.addAll(files);
                 
                 String checkPath = new File(baseOutputName+".gpx").getCanonicalPath();
@@ -158,39 +187,6 @@ public class GoPro2Trainer {
         
         GoPro2Trainer vr = new GoPro2Trainer(directory);
         vr.run();
-    }
-    
-    public void run() throws IOException, TransformerException, ParserConfigurationException {
-        logger.log(Level.INFO, "start g/v {0} {1} {2}", new Object[] {
-                Utils.formatDateTime(gpxHelper.startTime()), 
-                Utils.formatDateTime(vh.startTime()), 
-                Utils.formatElapsed(Math.abs(gpxHelper.startTime() - vh.startTime()))});
-        logger.log(Level.INFO, "end   g/v {0} {1} {2}", new Object[] {
-                Utils.formatDateTime(gpxHelper.endTime()), 
-                Utils.formatDateTime(vh.endTime()), 
-                Utils.formatElapsed(Math.abs(gpxHelper.endTime() - vh.endTime()))});
-
-        gpxHelper.trim(vh.startTime() + trimStart, vh.endTime() - trimEnd);
-        if (cmd.hasOption("fixMissing")) {
-            gpxHelper.fixMissingUpdates();
-        }
-        gpxHelper.changePolling(1000);
-        gpxHelper.markSpots();
-        vh.trim(gpxHelper.startTime(), gpxHelper.endTime(), gpxHelper.getCuts());
-
-        gpxHelper.removeStops();
-        gpxHelper.validate();
-        gpxHelper.smoothEleveation();
-        
-        writeXML(gpxHelper.getBaseName()+".gpx");
-        logger.log(Level.INFO, "start g/v {0} {1} {2}", 
-                new Object[]{Utils.formatDateTime(gpxHelper.startTime()), 
-                    Utils.formatDateTime(vh.startTime()), 
-                    Utils.formatElapsed(Math.abs(gpxHelper.startTime() - vh.startTime()))});
-        logger.log(Level.INFO, "end   g/v {0} {1} {2}", 
-                new Object[]{Utils.formatDateTime(gpxHelper.endTime()), 
-                    Utils.formatDateTime(vh.endTime()), 
-                    Utils.formatElapsed(Math.abs(gpxHelper.endTime() - vh.endTime()))});
     }
     
     public void writeXML(String fileName) throws TransformerException, IOException, ParserConfigurationException {

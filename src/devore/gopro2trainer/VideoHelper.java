@@ -30,21 +30,21 @@ import org.apache.commons.io.IOCase;
 import org.apache.commons.io.filefilter.WildcardFileFilter;
 
 /**
- *
- * @author steve
+ * Methods to load, trim, clip and combine videos.
  */
+
 public class VideoHelper {
     private static final Logger logger = Logger.getLogger(VideoHelper.class.getName());
     public int maxSizeMB;
     public int normalBitrate;
     public static boolean reencode;
-    
+    private static final String FPS="19.98";  //29.97
     public static final String CUT = "ffmpeg -y -ss %f -i %s -t %f -avoid_negative_ts 1 -c copy -map 0:v:0 cut%03d.mp4\n";
     public static final String STREAM_COPY = "ffmpeg -y -safe 0 -f concat -i mylist.txt -c copy -map v -metadata creation_time=\"%s\" \"%s\"\n";
-    private static final String ENCODE_ARGS = "-safe 0 -f concat -i mylist.txt -map v -filter:v fps=fps=29.97 -c:v libx264 -b:v %dk ";
+    private static final String ENCODE_ARGS = "-safe 0 -f concat -i mylist.txt -map v -filter:v fps=fps="+FPS+" -c:v libx264 -b:v %dk ";
     public static final String ENCODE = 
         "ffmpeg -y "+ENCODE_ARGS+" -pass 1 -an -f mp4 /dev/null && " +
-        "ffmpeg -y "+ENCODE_ARGS+"-metadata creation_time=\"%s\" -pass 2 \"%s\"";
+        "ffmpeg -y "+ENCODE_ARGS+"-metadata creation_time=\"%s\" -pass 2 \"%s\"\n";
 
     
     // public static final String GET_METADATA = "ffprobe -i \"%s\" -show_entries format=duration -show_entries format_tags=creation_time,firmware -v quiet -of csv=\"p=0\"";
@@ -64,7 +64,6 @@ public class VideoHelper {
     private long startClip;
     private long endClip;
     private String outputFile;
-    private boolean isGopro;
     private final List<String> sourceFiles = new ArrayList<>();
     
     public VideoHelper(File dir, CommandLine cmd) {
@@ -88,7 +87,9 @@ public class VideoHelper {
     }
     
     public void load(long offset, GPXHelper gpx) throws IOException {
+        System.out.println("dir: "+dir);
         Collection<File> files = FileUtils.listFiles(dir, new WildcardFileFilter("GH*.mp4", IOCase.INSENSITIVE), null);
+        logger.info("Load video files: ");
         for (File file : files) {
             sourceFiles.add(file.getName());
             GoProMP4 mp4 = new GoProMP4(file);
@@ -108,7 +109,12 @@ public class VideoHelper {
             }
             lastEndTime = vf.timeStamp + vf.length;
         }
+        logger.info(String.format("Loaded  Video %s to %s, duration: %s)",
+                Utils.formatDateTime(startTime()),
+                Utils.formatDateTime(endTime()),
+                Utils.formatElapsed(endTime() - startTime())));
     }
+    
     
     /**
      * This will check for missing video, and if it finds any, it will
@@ -124,7 +130,7 @@ public class VideoHelper {
         // If it is within a second, don't clip
         this.startClip =Math.max(startTime, startTime());
         this.endClip = Math.min(endTime, endTime());
-        logger.log(Level.INFO, "bounds: {0} {1} {2}", new Object[]{Utils.formatDateTime(startClip), Utils.formatDateTime(endClip), Utils.formatElapsed(endClip - startClip)});
+        logger.log(Level.INFO, "Trim video:   {0} to {1}, duration: {2}", new Object[]{Utils.formatDateTime(startClip), Utils.formatDateTime(endClip), Utils.formatElapsed(endClip - startClip)});
 
         // Take the list of clipped sections and calculate the 
         // the sections to save
@@ -143,21 +149,22 @@ public class VideoHelper {
         }
         
         long dur = 0;
+        logger.info("cuts");
         for (Range r : cuts) {
-            logger.fine(r.toString());
+            logger.info(r.toString());
             dur += r.getDuration();
         }
-        logger.log(Level.INFO, "cuts: {0}", Utils.formatElapsed(dur));
-        dur = 0;
+        logger.info("includes");
+        long includeDur = 0;
         for (Range r : includeRange) {
-            logger.fine(r.toString());
-            dur += r.getDuration();
+            logger.info(r.toString());
+            includeDur += r.getDuration();
         }
-        logger.log(Level.INFO, "dur: {0}", Utils.formatElapsed(dur));
+        logger.log(Level.INFO, "cuts, includes, total: {0} + {1} = {2}", new Object[] {Utils.formatElapsed(dur), Utils.formatElapsed(includeDur), Utils.formatElapsed(dur+includeDur)});
         logger.log(Level.FINE, "r1: {0}", Utils.formatDateTime(includeRange.get(0).start));
         logger.log(Level.FINE, "r2: {0}", Utils.formatDateTime(includeRange.get(includeRange.size()-1).end));
-        
 
+        logger.info("Video files:");
         videoFiles.forEach((vf) -> logger.info(vf.toString()));
 
         StringBuilder ffmpegScript = new StringBuilder();
@@ -194,7 +201,8 @@ public class VideoHelper {
                         } else {
                             offset = 0;
                         }
-                        if (isGopro) {
+                        // cut on keyframes.  This works for my GoPro.  Your mileage may vary.
+                        {
                             double lenSeconds = vf.length / 1000.0;
                             // this will cut on keyframes, at least for my gopro
                             adjStart = Math.rint(adjStart / 1.001) * 1.001;
@@ -219,7 +227,7 @@ public class VideoHelper {
         }
         logger.log(Level.INFO, "total: {0}", Utils.formatElapsed((long) (totalLength*1000)));
         if (cutNumber == 0) {
-            logger.info("There are no video cuts needed");
+            logger.log(Level.WARNING, "There are no video cuts needed. You can use your existing mp4 as-is");
             return;
         }
         if (cutNumber == 1 && !reencode) {
