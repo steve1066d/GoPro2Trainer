@@ -49,7 +49,10 @@ import org.w3c.dom.Element;
 import org.xml.sax.SAXException;
 
 public class GoPro2Trainer {
-    // -o "Elm Creek Outer Loop" -fixMissing -verbose -mph  -stopSpeed 4 -startSpeed 5 -elevation test.tcx -trimEnd 34000 -slope .01 -reencode GH*.mp4 
+    //-o "Elm Creek Outer Loop" -fixMissing -verbose -mph -startSpeed 5 -stopSpeed 4 -elevation test.tcx -trimEnd 34000 -slope .01 -advanceElevation 6500 -fixLoopElevation -reencode -filter "crop=h=in_h-156" GH*.mp4 
+    //-o "Elm Creek Outer Loop" -fixMissing -verbose -mph -startSpeed 5 -stopSpeed 4 -elevation test.tcx -trimEnd 34000 -slope .01 -advanceElevation 6500 -fixLoopElevation -reencode -bitrate 10000 -filter "crop=h=in_h-156" -encode "-preset medium" GH*.mp4
+    //-o "Elm Creek Outer Loop" -fixMissing -verbose -mph -startSpeed 5 -stopSpeed 4 -elevation test.tcx -trimEnd 34000 -slope .01 -advanceElevation 6500 -fixLoopElevation GH*.mp4 
+
     private static final Logger logger = Logger.getLogger(GoPro2Trainer.class.getName());
     private static CommandLine cmd;
     private static File directory;
@@ -103,8 +106,8 @@ public class GoPro2Trainer {
         options.addOption("offset", true, "Sets the offset of the video in milliseconds");
         options.addOption("trimStart", true, "Trims the start of the file in milliseconds");
         options.addOption("trimEnd", true, "Trims the end of the file in milliseconds");
-        options.addOption("maxSizeMB", true, "Sets the maximum size if reencoding.  The default is 2300");
-        options.addOption("bitrate", true, "The bitrate to use, if the maxSize is not reached. The default is 10000");
+        options.addOption("maxSizeMB", true, "Sets the maximum size if reencoding with a specified bitrate.  The default is unlimited");
+        options.addOption("bitrate", true, "The bitrate to use in kbit/s.  If not defined it will use one pass encoding");
         options.addOption("stopSpeed", true, "The minimum speed before a stop is recognized.  The default is 3 km/h");
         options.addOption("startSpeed", true, "The minimum speed before a stop end is recognized. The default is 6 km/h");
         options.addOption("mph", "Specify the speed in mph.  Otherwise km/h is used");
@@ -117,7 +120,8 @@ public class GoPro2Trainer {
         options.addOption("slope", true, "Changes the overall slope by the given decimal percentage.  Use .01 for 1%");
         options.addOption("advanceElevation", true, "Moves up elevation data by the given number of milliseconds.");
         options.addOption("fixLoopElevation", "Adjusts the elevations so the ending elevation matches the beginning elevation");
-        options.addOption("filter", true, "a complex ffmpeg filter.  Use [i] as input, and save to [o].  For example, \"[i]crop=h=in_h-156[o]\"");
+        options.addOption("filter", true, "a complex ffmpeg filter. For example, \"crop=h=in_h-156[t];[t]fps=fps=29.97\"");
+        options.addOption("encode", true, "H.264 encode options to pass to ffmpeg");
         CommandLineParser parser = new DefaultParser();
         boolean invalid = false;
         try {

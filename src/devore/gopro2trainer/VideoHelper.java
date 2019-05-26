@@ -41,12 +41,12 @@ public class VideoHelper {
     private static final String FPS="19.98";  //29.97
     public static final String CUT = "ffmpeg -y -ss %f -i %s -t %f -avoid_negative_ts 1 -c copy -map 0:v:0 cut%03d.mp4\n";
     public static final String STREAM_COPY = "ffmpeg -y -safe 0 -f concat -i mylist.txt -c copy -map v -metadata creation_time=\"%s\" \"%s\"\n";
-    private static final String ENCODE_ARGS = "%s -c:v libx264 -b:v %dk ";
-    public static final String ENCODE = 
+    private static final String ENCODE_ARGS = "%s -c:v libx264 -b:v %dk %s ";
+    public static final String TWO_PASS = 
         "ffmpeg -y "+ENCODE_ARGS+" -pass 1 -f mp4 /dev/null && " +
         "ffmpeg -y "+ENCODE_ARGS+"-metadata creation_time=\"%s\" -pass 2 \"%s\"\n";
     
-    public static final String ENCODE_SIMILAR = "ffmpeg -y %s -metadata creation_time=\"%s\" -preset medium \"%s\"\n";
+    public static final String SINGLE_PASS = "ffmpeg -y %s %s -metadata creation_time=\"%s\" \"%s\"\n";
     
     // public static final String GET_METADATA = "ffprobe -i \"%s\" -show_entries format=duration -show_entries format_tags=creation_time,firmware -v quiet -of csv=\"p=0\"";
     // use to determine keyframes:
@@ -58,7 +58,6 @@ public class VideoHelper {
     // extract gps from gopro
     // private static final String EXTRACT = "ffmpeg -i \"%s\" -codec copy -map 0:3 -f rawvideo \"%s\".gpmf";
     // private static final String TO_GPX = "gopro2gpx -i \"%s.gpmf\" -o \"%s.gpx\"";
-    
 
     private final File dir;
     private final List<VideoFile> videoFiles = new ArrayList<>();
@@ -66,14 +65,16 @@ public class VideoHelper {
     private long endClip;
     private String outputFile;
     private final List<String> sourceFiles = new ArrayList<>();
-    private String filter;
+    private final String filter;
+    private final String encodeOptions;
     
     public VideoHelper(File dir, CommandLine cmd) {
         this.dir = dir;
-        maxSizeMB = Integer.parseInt(cmd.getOptionValue("maxSizeMB", "2300"));
-        normalBitrate = Integer.parseInt(cmd.getOptionValue("bitrate", "10000"));
+        maxSizeMB = Integer.parseInt(cmd.getOptionValue("maxSizeMB", "0"));
+        normalBitrate = Integer.parseInt(cmd.getOptionValue("bitrate", "0"));
         reencode = cmd.hasOption("reencode");
         filter = cmd.getOptionValue("filter");
+        encodeOptions = cmd.getOptionValue("encode", "");
     }
     
     public void setOutputFile(String outputFile) {
@@ -90,7 +91,6 @@ public class VideoHelper {
     }
     
     public void load(long offset, GPXHelper gpx) throws IOException {
-        System.out.println("dir: "+dir);
         Collection<File> files = FileUtils.listFiles(dir, new WildcardFileFilter("GH*.mp4", IOCase.INSENSITIVE), null);
         logger.info("Load video files: ");
         for (File file : files) {
@@ -175,22 +175,22 @@ public class VideoHelper {
         ArrayList<String> tempFiles = new ArrayList<>();
         String timestamp = Utils.isoDate(startClip);
         if (!reencode) {
-            ffmpegScript.append(getStreamCopy(includeRange, cutFile, tempFiles));
+            ffmpegScript.append(getStreamCuts(includeRange, cutFile, tempFiles));
             ffmpegScript.append(String.format(STREAM_COPY, timestamp, outputFile));
         } else {
-            // concatenate all the videos together
+
             long seconds = (endClip - startClip) / 1000;
             long bitrate = normalBitrate;
-            if ((seconds * bitrate / 8192) > maxSizeMB) {
+            if (maxSizeMB > 0 && (seconds * bitrate / 8192) > maxSizeMB) {
                 bitrate = maxSizeMB * 8192 / seconds;
             }
             String input = calcFilter(videoFiles, includeRange);
-            if (false) {
-                ffmpegScript.append(String.format(ENCODE, input, bitrate, input, bitrate, timestamp, outputFile));
+            if (bitrate > 0) {
+                ffmpegScript.append(String.format(TWO_PASS, input, bitrate, encodeOptions, input, bitrate, encodeOptions, timestamp, outputFile));
                 tempFiles.add("ffmpeg2pass-0.log");
                 tempFiles.add("ffmpeg2pass-0.log.mbtree");
             } else {
-                ffmpegScript.append(String.format(ENCODE_SIMILAR, input, timestamp, outputFile));
+                ffmpegScript.append(String.format(SINGLE_PASS, input, encodeOptions, timestamp, outputFile));
             }
         }
         tempFiles.forEach((tempFile) -> ffmpegScript.append(String.format("$DEL$ \"%s\"\n", tempFile)));
@@ -200,7 +200,7 @@ public class VideoHelper {
         FileUtils.writeStringToFile(new File("mylist.txt"), toUnix(cutFile.toString()), StandardCharsets.UTF_8.name());
     }
 
-    private String getStreamCopy(List<Range> includeRange, StringBuilder cutFile, List<String> tempFiles) {
+    private String getStreamCuts(List<Range> includeRange, StringBuilder cutFile, List<String> tempFiles) {
         StringBuilder ffmpegScript = new StringBuilder();
         int cutNumber = 0;
         double totalLength = 0;
@@ -272,7 +272,15 @@ public class VideoHelper {
         return ffmpegScript.toString();
     }
     
-    public String calcFilter(List<VideoFile> videoFiles, List<Range> includes) {
+    /**
+     * This creates a custom filter that concatenates all input files, then creates nonstop segments, 
+     * then combining them back to one file without stops.
+     * 
+     * @param videoFiles
+     * @param includes
+     * @return 
+     */
+    private String calcFilter(List<VideoFile> videoFiles, List<Range> includes) {
         StringBuilder str = new StringBuilder();
         for (VideoFile vf : videoFiles) {
             str.append("-i "+vf.getName()+" ");
@@ -291,19 +299,19 @@ public class VideoHelper {
         str.append("; ");
         ct=0;
         for (Range r : includes) {
-            String formatStr = String.format("start=%f:end=%f", (r.start - startClip)/1000.0, (r.end- startClip)/1000.0);
+            String formatStr = 
+                    String.format("start=%f:end=%f", (r.start - startClip) / 1000.0, (r.end - startClip) / 1000.0);
             str.append("[out"+ct+"]trim="+formatStr+",setpts=PTS-STARTPTS[vo"+ct+"];");
             ct++;
         }
         for (int i=0; i < ct; i++) {
             str.append("[vo"+i+"]");
         }
-        str.append("concat=n="+ct+":v=1[i]");
+        str.append("concat=n="+ct+":v=1");
         if (filter != null) {
-            str.append(";"+filter+"\" -map [o]");
-        } else {
-            str.append("\" -map [i]");
+            str.append("[i];[i]"+filter);
         }
+        str.append("[o]\" -map [o]");
         return str.toString();
     }
     
