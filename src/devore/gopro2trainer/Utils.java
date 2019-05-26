@@ -43,4 +43,9 @@ public class Utils {
     public static String isoDate(long millis) {
         return Instant.ofEpochMilli(millis).toString();        
     }
+
+
+    public static double interpolate(long x1, double y1, long x2, double y2, long x) {
+        return ((x - x1) * (y2 - y1)) / (x2 - x1) + y1;
+    }
 }

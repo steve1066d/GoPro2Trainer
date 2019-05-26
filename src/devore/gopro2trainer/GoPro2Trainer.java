@@ -66,10 +66,11 @@ public class GoPro2Trainer {
     public void run() throws IOException, TransformerException, ParserConfigurationException, SAXException {
         gpxHelper.trimToVideo(vh.startTime() + trimStart, vh.endTime() - trimEnd);
         gpxHelper.fixMissingUpdates();
-        gpxHelper.fixElevations();
         gpxHelper.changePolling(1000);
+        gpxHelper.fixElevations();
 //        Experimental.checkSync(cmd, gpxHelper.getPoints());
 
+        gpxHelper.advanceElevation();
         gpxHelper.removeBeginEnd();
         gpxHelper.markSpots();
         vh.trim(gpxHelper.startTime(), gpxHelper.endTime(), gpxHelper.getCuts());
@@ -114,7 +115,9 @@ public class GoPro2Trainer {
         options.addOption("elevation", true, "A gps file that is used only for elevation data. It will replace "
                 + "the existing gps data with elevations that are the closest match");
         options.addOption("slope", true, "Changes the overall slope by the given decimal percentage.  Use .01 for 1%");
-        
+        options.addOption("advanceElevation", true, "Moves up elevation data by the given number of milliseconds.");
+        options.addOption("fixLoopElevation", "Adjusts the elevations so the ending elevation matches the beginning elevation");
+        options.addOption("filter", true, "a complex ffmpeg filter.  Use [i] as input, and save to [o].  For example, \"[i]crop=h=in_h-156[o]\"");
         CommandLineParser parser = new DefaultParser();
         boolean invalid = false;
         try {

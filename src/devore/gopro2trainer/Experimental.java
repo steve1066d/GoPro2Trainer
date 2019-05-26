@@ -42,11 +42,12 @@ public class Experimental {
             for (int i=2; i < points.size(); i++) {
                 Point pt = points.get(i);
                 Point last = points.get(i-1);
-                pw.format("%s, %s, %f, %f, %.1f, %.1f\n", 
+                pw.format("%s, %f, %f, %.1f, %.1f\n", 
                         Utils.formatDateTime(pt.timestamp), 
                         pt.getMPH(last), 
                         pt.getSlope(last), 
-                        getEstimatedPower(pt, last, points.get(i-2)));
+                        getEstimatedPower(pt, last, points.get(i-2)),
+                        pt.power);
             }
         }
     }
@@ -86,7 +87,8 @@ public class Experimental {
     private static final double g = 9.80655; // gravitational constant
     private static double Crr = .0050;  //(rolling resistance .002 concrete, .005, asphalt);
     private static double w = 0; // windspeed (m/s)
-    private static double CdA = .408; // tops=.408, hoods=.324, drops=.307, aerobars=.2914
+    // I'm making a wild guess at flat bar gravel bike resistance at .5
+    private static double CdA = .5; // tops=.408, hoods=.324, drops=.307, aerobars=.2914
     private static double loss = .035; // 3% new well oiled chain, 4% dry, 5% old, dry
 
     // See https://www.omnicalculator.com/sports/cycling-wattage

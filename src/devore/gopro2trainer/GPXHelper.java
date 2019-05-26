@@ -27,6 +27,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.TreeMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -388,21 +389,34 @@ public final class GPXHelper {
             List<Point> points = elevationHelper.getPoints();
             long time = System.currentTimeMillis();
             // not very efficient, but computers are fast.  
-            // though we can do this parallel, which will speed things up a bit.
             pointList.parallelStream().forEach((pt) -> {
                 double closestSq = Double.MAX_VALUE;
                 Point closestPt = null;
                 for (Point testPt : points) {
                     double test = Point2D.distanceSq(pt.lat, pt.lon, testPt.lat, testPt.lon);
-                    if (test < closestSq) {
+                    if (test < closestSq && Math.abs(testPt.timestamp - pt.timestamp) < 20000) {
                         closestSq = test;
                         closestPt = testPt;
                     }
                 }
                 pt.elevation = closestPt.elevation;
+                pt.speed = closestPt.speed;
+                pt.power = closestPt.power;
             });
             logger.log(Level.INFO, "Fixed elevations. Took {0}", System.currentTimeMillis() - time);
         }
+    }
+    
+    public double getTotalMiles() {
+        double miles = 0;
+        Point last = null;
+        for (Point pt : pointList) {
+            if (last != null) {
+                miles += pt.getMiles(last);
+            }
+            last = pt;
+        }
+        return miles;
     }
 
     /**
@@ -411,6 +425,7 @@ public final class GPXHelper {
      * @param cmd 
      */
     void changeSlope() {
+        double slope = 0;
         String slopeStr = cmd.getOptionValue("slope");
         if (slopeStr != null) {
             double mult = 1;
@@ -418,8 +433,16 @@ public final class GPXHelper {
                 slopeStr = slopeStr.substring(0, slopeStr.length()-1);
                 mult = .01;
             }
+            slope = Double.parseDouble(slopeStr) * mult;
+            logger.info(String.format("Setting slope: %.1f%%", slope*100));
+        }
+        if (cmd.hasOption("fixLoopElevation")) {
+            double elevationError = pointList.get(0).elevation - pointList.get(pointList.size()-1).elevation;
+            logger.info(String.format("Adding %.1f meters to fix ending elevation", elevationError));
+            slope += elevationError * Point.METERS_TO_MILES / getTotalMiles();
+        }
+        if (slope != 0) {
             double totalSlope = 0;
-            double slope = Double.parseDouble(slopeStr) * mult;
             Point last = pointList.get(0);
             for (int i=1; i < pointList.size(); i++) {
                 Point pt = pointList.get(i);
@@ -429,7 +452,35 @@ public final class GPXHelper {
                 pt.elevation += totalSlope;
                 last = pt;
             }
-            logger.info(String.format("Setting slope: %.1f%%, total change %.0f meters", slope*100, totalSlope));
+            logger.info(String.format("Total slope: %.1f%%, total change %.0f meters", slope*100, totalSlope));
+        }
+    }
+
+    /**
+     * The elevation data tends to be a little delayed on the Garmin.  This adjusts the timing.
+     */
+    void advanceElevation() {
+        String advanceStr = cmd.getOptionValue("advanceElevation");
+        if (advanceStr != null) {
+            long advance = Long.parseLong(advanceStr);
+            logger.log(Level.INFO, "Advance elevation by {0} ms", advance);
+            TreeMap<Long,Double> lookup = new TreeMap<>();
+            for (Point pt : pointList) {
+                lookup.put(pt.timestamp + advance, pt.elevation);
+            }
+            for (Point pt : pointList) {
+                Map.Entry<Long,Double> lowest = lookup.floorEntry(pt.timestamp);
+                Map.Entry<Long,Double> highest = lookup.ceilingEntry(pt.timestamp);
+                if (lowest == null) {
+                    pt.elevation = highest.getValue();
+                } else if (highest == null) {
+                    pt.elevation = lowest.getValue();
+                } else {
+                    pt.elevation = Utils.interpolate(lowest.getKey(), lowest.getValue(), 
+                            highest.getKey(), highest.getValue(),
+                            pt.timestamp);
+                }
+            }
         }
     }
 }

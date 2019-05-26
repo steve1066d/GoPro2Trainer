@@ -41,11 +41,12 @@ public class VideoHelper {
     private static final String FPS="19.98";  //29.97
     public static final String CUT = "ffmpeg -y -ss %f -i %s -t %f -avoid_negative_ts 1 -c copy -map 0:v:0 cut%03d.mp4\n";
     public static final String STREAM_COPY = "ffmpeg -y -safe 0 -f concat -i mylist.txt -c copy -map v -metadata creation_time=\"%s\" \"%s\"\n";
-    private static final String ENCODE_ARGS = "-safe 0 -f concat -i mylist.txt -map v -filter:v fps=fps="+FPS+" -c:v libx264 -b:v %dk ";
+    private static final String ENCODE_ARGS = "%s -c:v libx264 -b:v %dk ";
     public static final String ENCODE = 
-        "ffmpeg -y "+ENCODE_ARGS+" -pass 1 -an -f mp4 /dev/null && " +
+        "ffmpeg -y "+ENCODE_ARGS+" -pass 1 -f mp4 /dev/null && " +
         "ffmpeg -y "+ENCODE_ARGS+"-metadata creation_time=\"%s\" -pass 2 \"%s\"\n";
-
+    
+    public static final String ENCODE_SIMILAR = "ffmpeg -y %s -metadata creation_time=\"%s\" -preset medium \"%s\"\n";
     
     // public static final String GET_METADATA = "ffprobe -i \"%s\" -show_entries format=duration -show_entries format_tags=creation_time,firmware -v quiet -of csv=\"p=0\"";
     // use to determine keyframes:
@@ -65,12 +66,14 @@ public class VideoHelper {
     private long endClip;
     private String outputFile;
     private final List<String> sourceFiles = new ArrayList<>();
+    private String filter;
     
     public VideoHelper(File dir, CommandLine cmd) {
         this.dir = dir;
         maxSizeMB = Integer.parseInt(cmd.getOptionValue("maxSizeMB", "2300"));
         normalBitrate = Integer.parseInt(cmd.getOptionValue("bitrate", "10000"));
         reencode = cmd.hasOption("reencode");
+        filter = cmd.getOptionValue("filter");
     }
     
     public void setOutputFile(String outputFile) {
@@ -170,7 +173,35 @@ public class VideoHelper {
         StringBuilder ffmpegScript = new StringBuilder();
         StringBuilder cutFile = new StringBuilder();
         ArrayList<String> tempFiles = new ArrayList<>();
+        String timestamp = Utils.isoDate(startClip);
+        if (!reencode) {
+            ffmpegScript.append(getStreamCopy(includeRange, cutFile, tempFiles));
+            ffmpegScript.append(String.format(STREAM_COPY, timestamp, outputFile));
+        } else {
+            // concatenate all the videos together
+            long seconds = (endClip - startClip) / 1000;
+            long bitrate = normalBitrate;
+            if ((seconds * bitrate / 8192) > maxSizeMB) {
+                bitrate = maxSizeMB * 8192 / seconds;
+            }
+            String input = calcFilter(videoFiles, includeRange);
+            if (false) {
+                ffmpegScript.append(String.format(ENCODE, input, bitrate, input, bitrate, timestamp, outputFile));
+                tempFiles.add("ffmpeg2pass-0.log");
+                tempFiles.add("ffmpeg2pass-0.log.mbtree");
+            } else {
+                ffmpegScript.append(String.format(ENCODE_SIMILAR, input, timestamp, outputFile));
+            }
+        }
+        tempFiles.forEach((tempFile) -> ffmpegScript.append(String.format("$DEL$ \"%s\"\n", tempFile)));
         
+        FileUtils.writeStringToFile(new File("convert.sh"), toUnix(ffmpegScript.toString()), StandardCharsets.UTF_8.name());
+        FileUtils.writeStringToFile(new File("convert.cmd"), toWindows(ffmpegScript.toString()), StandardCharsets.UTF_8.name());
+        FileUtils.writeStringToFile(new File("mylist.txt"), toUnix(cutFile.toString()), StandardCharsets.UTF_8.name());
+    }
+
+    private String getStreamCopy(List<Range> includeRange, StringBuilder cutFile, List<String> tempFiles) {
+        StringBuilder ffmpegScript = new StringBuilder();
         int cutNumber = 0;
         double totalLength = 0;
         double offset =0;
@@ -202,7 +233,7 @@ public class VideoHelper {
                             offset = 0;
                         }
                         // cut on keyframes.  This works for my GoPro.  Your mileage may vary.
-                        {
+                        if (!reencode) {
                             double lenSeconds = vf.length / 1000.0;
                             // this will cut on keyframes, at least for my gopro
                             adjStart = Math.rint(adjStart / 1.001) * 1.001;
@@ -225,10 +256,9 @@ public class VideoHelper {
                 }
             }
         }
-        logger.log(Level.INFO, "total: {0}", Utils.formatElapsed((long) (totalLength*1000)));
         if (cutNumber == 0) {
             logger.log(Level.WARNING, "There are no video cuts needed. You can use your existing mp4 as-is");
-            return;
+            return "";
         }
         if (cutNumber == 1 && !reencode) {
             // only 1 file, so merge isn't needed, just rename it.
@@ -236,26 +266,45 @@ public class VideoHelper {
             tempFiles.remove("cut001.mp4");
         } else {
             tempFiles.add("mylist.txt");
-            // concatenate all the videos together
-            String timestamp = Utils.isoDate(startClip);
-            if (!reencode) {
-                ffmpegScript.append(String.format(STREAM_COPY, timestamp, outputFile));
-            } else {
-                long seconds = (endClip - startClip) / 1000;
-                long bitrate = normalBitrate;
-                if ((seconds * bitrate / 8192) > maxSizeMB) {
-                    bitrate = maxSizeMB * 8192 / seconds;
-                }
-                ffmpegScript.append(String.format(ENCODE, bitrate, bitrate, timestamp, outputFile));
-                tempFiles.add("ffmpeg2pass-0.log");
-                tempFiles.add("ffmpeg2pass-0.log.mbtree");
-            }
         }
-        tempFiles.forEach((tempFile) -> ffmpegScript.append(String.format("$DEL$ \"%s\"\n", tempFile)));
-        
-        FileUtils.writeStringToFile(new File("convert.sh"), toUnix(ffmpegScript.toString()), StandardCharsets.UTF_8.name());
-        FileUtils.writeStringToFile(new File("convert.cmd"), toWindows(ffmpegScript.toString()), StandardCharsets.UTF_8.name());
-        FileUtils.writeStringToFile(new File("mylist.txt"), toUnix(cutFile.toString()), StandardCharsets.UTF_8.name());
+
+        logger.log(Level.INFO, "total: {0}", Utils.formatElapsed((long) (totalLength*1000)));
+        return ffmpegScript.toString();
+    }
+    
+    public String calcFilter(List<VideoFile> videoFiles, List<Range> includes) {
+        StringBuilder str = new StringBuilder();
+        for (VideoFile vf : videoFiles) {
+            str.append("-i "+vf.getName()+" ");
+        }
+        str.append("-filter_complex \"");
+        int ct=0;
+        for (VideoFile vf : videoFiles) {
+            str.append("["+ct+":v:0]");
+            ct++;
+        }
+        str.append("concat=n="+(videoFiles.size())+":v=1[outv]; [outv]");
+        str.append(" split="+includes.size()+" ");
+        for (int i=0; i < includes.size(); i++) {
+            str.append("[out"+i+"]");
+        }
+        str.append("; ");
+        ct=0;
+        for (Range r : includes) {
+            String formatStr = String.format("start=%f:end=%f", (r.start - startClip)/1000.0, (r.end- startClip)/1000.0);
+            str.append("[out"+ct+"]trim="+formatStr+",setpts=PTS-STARTPTS[vo"+ct+"];");
+            ct++;
+        }
+        for (int i=0; i < ct; i++) {
+            str.append("[vo"+i+"]");
+        }
+        str.append("concat=n="+ct+":v=1[i]");
+        if (filter != null) {
+            str.append(";"+filter+"\" -map [o]");
+        } else {
+            str.append("\" -map [i]");
+        }
+        return str.toString();
     }
     
     private String toWindows(String x) {

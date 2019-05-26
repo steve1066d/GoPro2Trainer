@@ -17,6 +17,8 @@
 package devore.gopro2trainer;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 
 public class VideoFile implements Comparable<VideoFile> {
     File file;
